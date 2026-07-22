@@ -1,6 +1,7 @@
-.PHONY: proto build run-api run-worker test clean help
+.PHONY: proto build run-api run-worker test docker-up docker-down clean help
 
 PROTO_DIR=proto
+COMPOSE_FILE=deployments/docker-compose.yml
 
 proto:
 	protoc --go_out=. --go_opt=paths=source_relative \
@@ -20,5 +21,12 @@ run-worker:
 test:
 	go test -v ./...
 
+docker-up:
+	docker compose -f $(COMPOSE_FILE) up -d
+
+docker-down:
+	docker compose -f $(COMPOSE_FILE) down
+
 clean:
 	rm -rf bin/
+
