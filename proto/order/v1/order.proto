@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package order.v1;
+
+option go_package = "github.com/arthkinq/order-flow-engine/proto/order/v1;orderv1";
+
+import "google/protobuf/timestamp.proto";
+
+// OrderService handles order creation and status retrieval.
+service OrderService {
+  // CreateOrder submits a new order into the processing pipeline.
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+
+  // GetOrder retrieves an existing order by its ID.
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+}
+
+// OrderStatus defines the lifecycle states of an order.
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_PENDING = 1;
+  ORDER_STATUS_PROCESSING = 2;
+  ORDER_STATUS_COMPLETED = 3;
+  ORDER_STATUS_FAILED = 4;
+}
+
+// OrderItem represents an individual line item inside an order.
+message OrderItem {
+  string item_id = 1;
+  int32 quantity = 2;
+  int64 price_cents = 3; // Price in smallest currency unit to avoid floating-point issues
+}
+
+// CreateOrderRequest is the payload required to place a new order.
+message CreateOrderRequest {
+  string customer_id = 1;
+  repeated OrderItem items = 2;
+}
+
+// CreateOrderResponse returns the initial state of a newly created order.
+message CreateOrderResponse {
+  string order_id = 1;
+  OrderStatus status = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+// GetOrderRequest is the lookup query by order ID.
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+// GetOrderResponse returns full details of an order.
+message GetOrderResponse {
+  Order order = 1;
+}
+
+// Order contains the full domain model representation over gRPC.
+message Order {
+  string id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  int64 total_amount_cents = 4;
+  OrderStatus status = 5;
+  string failure_reason = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
