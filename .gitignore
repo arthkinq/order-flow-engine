@@ -1,0 +1,26 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts & coverage
+*.out
+*.test
+coverage.txt
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+
+# OS generated
+.DS_Store
+Thumbs.db
