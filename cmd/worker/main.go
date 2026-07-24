@@ -20,12 +20,15 @@ func main() {
 	cfg := config.Load()
 	log.Printf("Starting Order Flow Engine Worker (workers count: %d)...", cfg.WorkerCount)
 
-	// 1. Connect to PostgreSQL
 	db, err := sql.Open("pgx", cfg.DBConnString)
 	if err != nil {
 		log.Fatalf("Failed to open DB connection: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Error closing DB: %v", err)
+		}
+	}()
 
 	if err := db.Ping(); err != nil {
 		log.Printf("Warning: Database ping failed (will retry on operations): %v", err)
@@ -33,10 +36,8 @@ func main() {
 		log.Println("Connected to PostgreSQL successfully.")
 	}
 
-	// 2. Initialize Repository
 	repo := repository.NewPostgresRepository(db)
 
-	// 3. Initialize RabbitMQ Consumer
 	consumerCfg := queue.ConsumerConfig{
 		URL:           cfg.RabbitMQURL,
 		Queue:         cfg.Queue,
@@ -48,11 +49,9 @@ func main() {
 		log.Fatalf("Failed to initialize RabbitMQ consumer: %v", err)
 	}
 
-	// 4. Initialize Processor & Worker Pool
 	processor := worker.NewOrderProcessor(repo)
 	pool := worker.NewPool(consumer, processor, cfg.WorkerCount)
 
-	// 5. Start Worker Pool
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -61,7 +60,6 @@ func main() {
 	}
 	log.Println("Worker pool started and listening for incoming order tasks...")
 
-	// 6. Graceful Shutdown Signal Handling
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
