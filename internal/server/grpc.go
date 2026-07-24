@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/arthkinq/order-flow-engine/internal/domain"
+	"github.com/arthkinq/order-flow-engine/internal/metrics"
 	"github.com/arthkinq/order-flow-engine/internal/queue"
 	"github.com/arthkinq/order-flow-engine/internal/ratelimit"
 	"github.com/arthkinq/order-flow-engine/internal/repository"
@@ -66,6 +67,8 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *orderv1.CreateOrderR
 	if err := s.publisher.PublishOrderCreated(ctx, order.ID); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to publish order to queue: %v", err)
 	}
+
+	metrics.OrdersCreatedTotal.Inc()
 
 	return &orderv1.CreateOrderResponse{
 		OrderId:   order.ID,

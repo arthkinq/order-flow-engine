@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/arthkinq/order-flow-engine/internal/domain"
+	"github.com/arthkinq/order-flow-engine/internal/metrics"
 	"github.com/arthkinq/order-flow-engine/internal/repository"
 )
 
@@ -29,6 +30,11 @@ func NewOrderProcessor(repo repository.OrderRepository) *OrderProcessor {
 
 // ProcessOrder executes the business pipeline for a given order ID.
 func (p *OrderProcessor) ProcessOrder(ctx context.Context, orderID string) error {
+	start := time.Now()
+	defer func() {
+		metrics.OrderProcessingDuration.Observe(time.Since(start).Seconds())
+	}()
+
 	order, err := p.repo.GetByID(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch order [%s]: %w", orderID, err)
@@ -51,6 +57,8 @@ func (p *OrderProcessor) ProcessOrder(ctx context.Context, orderID string) error
 		failureMsg := "payment gateway processing error: insufficient funds or timeout"
 		_ = order.TransitionTo(domain.StatusFailed, failureMsg)
 		_ = p.repo.UpdateStatus(ctx, order.ID, domain.StatusFailed, failureMsg)
+
+		metrics.OrdersProcessedTotal.WithLabelValues("failed").Inc()
 		return fmt.Errorf("payment failed for order [%s]: %s", orderID, failureMsg)
 	}
 
@@ -61,5 +69,6 @@ func (p *OrderProcessor) ProcessOrder(ctx context.Context, orderID string) error
 		return fmt.Errorf("failed to update completed status in db: %w", err)
 	}
 
+	metrics.OrdersProcessedTotal.WithLabelValues("completed").Inc()
 	return nil
 }
