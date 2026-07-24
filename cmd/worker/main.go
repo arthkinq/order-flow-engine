@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/arthkinq/order-flow-engine/internal/config"
+	"github.com/arthkinq/order-flow-engine/internal/metrics"
 	"github.com/arthkinq/order-flow-engine/internal/queue"
 	"github.com/arthkinq/order-flow-engine/internal/repository"
 	"github.com/arthkinq/order-flow-engine/internal/worker"
@@ -19,6 +20,8 @@ import (
 func main() {
 	cfg := config.Load()
 	log.Printf("Starting Order Flow Engine Worker (workers count: %d)...", cfg.WorkerCount)
+
+	metrics.StartServer(":2113")
 
 	db, err := sql.Open("pgx", cfg.DBConnString)
 	if err != nil {

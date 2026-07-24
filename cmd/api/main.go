@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/arthkinq/order-flow-engine/internal/config"
+	"github.com/arthkinq/order-flow-engine/internal/metrics"
 	"github.com/arthkinq/order-flow-engine/internal/queue"
 	"github.com/arthkinq/order-flow-engine/internal/ratelimit"
 	"github.com/arthkinq/order-flow-engine/internal/repository"
@@ -23,6 +24,8 @@ import (
 func main() {
 	cfg := config.Load()
 	log.Printf("Starting Order Flow Engine API Server on port %s...", cfg.GRPCServerPort)
+
+	metrics.StartServer(":2112")
 
 	db, err := sql.Open("pgx", cfg.DBConnString)
 	if err != nil {
