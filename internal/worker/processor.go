@@ -51,7 +51,11 @@ func (p *OrderProcessor) ProcessOrder(ctx context.Context, orderID string) error
 		return fmt.Errorf("failed to update status in db: %w", err)
 	}
 
-	time.Sleep(p.paymentLatency)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(p.paymentLatency):
+	}
 
 	if rand.Float64() < p.failureProbability {
 		failureMsg := "payment gateway processing error: insufficient funds or timeout"

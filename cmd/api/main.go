@@ -16,6 +16,7 @@ import (
 	"github.com/arthkinq/order-flow-engine/internal/ratelimit"
 	"github.com/arthkinq/order-flow-engine/internal/repository"
 	"github.com/arthkinq/order-flow-engine/internal/server"
+	"github.com/arthkinq/order-flow-engine/migrations"
 	orderv1 "github.com/arthkinq/order-flow-engine/proto/order/v1"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"google.golang.org/grpc"
@@ -38,9 +39,12 @@ func main() {
 	}()
 
 	if err := db.Ping(); err != nil {
-		log.Printf("Warning: Database ping failed: %v", err)
-	} else {
-		log.Println("Connected to PostgreSQL successfully.")
+		log.Fatalf("Database ping failed: %v", err)
+	}
+	log.Println("Connected to PostgreSQL successfully.")
+
+	if err := migrate.Up(db); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	repo := repository.NewPostgresRepository(db)
