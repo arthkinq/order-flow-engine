@@ -60,7 +60,9 @@ order-flow-engine/
 ├── proto/order/v1/        # Protobuf definition and Go stubs
 ├── migrations/            # SQL migration files
 ├── deployments/           # Docker Compose & Prometheus config
-├── tests/load/            # k6 load testing script
+├── tests/                 # Integration tests & k6 load testing script
+│   ├── integration_test.go
+│   └── load/k6_test.js
 ├── Dockerfile             # Multi-stage build specification
 └── Makefile
 ```
@@ -89,11 +91,30 @@ make docker-up
 
 ---
 
+## Performance & Load Test Results
+
+Load testing executed via `k6` using 50 concurrent Virtual Users (VUs) over 50 seconds:
+
+| Metric | Result |
+|---|---|
+| **Peak Throughput** | ~250+ Orders / sec |
+| **gRPC Average Latency** | `2.9 ms` |
+| **p(95) Latency** | `9.5 ms` |
+| **Success Rate** | `100%` (0 failed requests) |
+| **Pipeline Reliability** | All orders queued to RabbitMQ & processed asynchronously to `COMPLETED` |
+
+---
+
 ## Testing
 
 ### Run All Unit & Integration Tests
 ```bash
 make test
+```
+
+To run end-to-end integration tests explicitly against the live Docker stack:
+```bash
+go test -v ./tests
 ```
 
 ### Run gRPC Load Test with k6
