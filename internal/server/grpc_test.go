@@ -7,6 +7,7 @@ import (
 	"github.com/arthkinq/order-flow-engine/internal/domain"
 	"github.com/arthkinq/order-flow-engine/internal/server"
 	orderv1 "github.com/arthkinq/order-flow-engine/proto/order/v1"
+	"github.com/ozontech/testo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -69,7 +70,11 @@ func (m *mockLimiter) Close() error {
 	return nil
 }
 
-func TestCreateOrder_Success(t *testing.T) {
+type ServerSuite struct {
+	testo.Suite[*testo.T]
+}
+
+func (ServerSuite) TestCreateOrder_Success(t *testo.T) {
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	lim := &mockLimiter{allowed: true}
@@ -94,7 +99,7 @@ func TestCreateOrder_Success(t *testing.T) {
 	assert.Equal(t, resp.GetOrderId(), pub.published[0])
 }
 
-func TestCreateOrder_RateLimited(t *testing.T) {
+func (ServerSuite) TestCreateOrder_RateLimited(t *testo.T) {
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	lim := &mockLimiter{allowed: false}
@@ -119,7 +124,7 @@ func TestCreateOrder_RateLimited(t *testing.T) {
 	assert.Empty(t, pub.published)
 }
 
-func TestGetOrder_Success(t *testing.T) {
+func (ServerSuite) TestGetOrder_Success(t *testo.T) {
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	lim := &mockLimiter{allowed: true}
@@ -142,7 +147,7 @@ func TestGetOrder_Success(t *testing.T) {
 	assert.Equal(t, orderv1.OrderStatus_ORDER_STATUS_PENDING, resp.GetOrder().GetStatus())
 }
 
-func TestGetOrder_NotFound(t *testing.T) {
+func (ServerSuite) TestGetOrder_NotFound(t *testo.T) {
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	lim := &mockLimiter{allowed: true}
@@ -158,4 +163,8 @@ func TestGetOrder_NotFound(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestServerSuite(t *testing.T) {
+	testo.RunSuite(t, new(ServerSuite))
 }

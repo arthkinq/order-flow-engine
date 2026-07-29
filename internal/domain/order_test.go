@@ -5,13 +5,18 @@ import (
 	"testing"
 
 	"github.com/arthkinq/order-flow-engine/internal/domain"
+	"github.com/ozontech/testo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewOrder_Success(t *testing.T) {
+type DomainSuite struct {
+	testo.Suite[*testo.T]
+}
+
+func (DomainSuite) TestNewOrder_Success(t *testo.T) {
 	items := []domain.OrderItem{
-		{ItemID: "item-1", Quantity: 2, PriceCents: 500}, // 1000 cents
+		{ItemID: "item-1", Quantity: 2, PriceCents: 500},  // 1000 cents
 		{ItemID: "item-2", Quantity: 1, PriceCents: 1500}, // 1500 cents
 	}
 
@@ -28,7 +33,7 @@ func TestNewOrder_Success(t *testing.T) {
 	assert.False(t, order.UpdatedAt.IsZero())
 }
 
-func TestNewOrder_ValidationErrors(t *testing.T) {
+func (DomainSuite) TestNewOrder_ValidationErrors(t *testo.T) {
 	tests := []struct {
 		name       string
 		customerID string
@@ -62,50 +67,54 @@ func TestNewOrder_ValidationErrors(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			order, err := domain.NewOrder(tt.customerID, tt.items)
-			assert.Nil(t, order)
-			require.Error(t, err)
-			assert.True(t, errors.Is(err, domain.ErrInvalidOrder))
-		})
+		order, err := domain.NewOrder(tt.customerID, tt.items)
+		assert.Nil(t, order, "case: %s", tt.name)
+		require.Error(t, err, "case: %s", tt.name)
+		assert.True(t, errors.Is(err, domain.ErrInvalidOrder), "case: %s", tt.name)
 	}
 }
 
-func TestOrder_StateTransitions(t *testing.T) {
+func (DomainSuite) TestOrder_StateTransitions_PendingToCompleted(t *testo.T) {
 	items := []domain.OrderItem{{ItemID: "item-1", Quantity: 1, PriceCents: 1000}}
 
-	t.Run("valid flow PENDING -> PROCESSING -> COMPLETED", func(t *testing.T) {
-		order, err := domain.NewOrder("cust-1", items)
-		require.NoError(t, err)
+	order, err := domain.NewOrder("cust-1", items)
+	require.NoError(t, err)
 
-		err = order.TransitionTo(domain.StatusProcessing, "")
-		require.NoError(t, err)
-		assert.Equal(t, domain.StatusProcessing, order.Status)
+	err = order.TransitionTo(domain.StatusProcessing, "")
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusProcessing, order.Status)
 
-		err = order.TransitionTo(domain.StatusCompleted, "")
-		require.NoError(t, err)
-		assert.Equal(t, domain.StatusCompleted, order.Status)
-	})
+	err = order.TransitionTo(domain.StatusCompleted, "")
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusCompleted, order.Status)
+}
 
-	t.Run("valid flow PENDING -> FAILED", func(t *testing.T) {
-		order, err := domain.NewOrder("cust-1", items)
-		require.NoError(t, err)
+func (DomainSuite) TestOrder_StateTransitions_PendingToFailed(t *testo.T) {
+	items := []domain.OrderItem{{ItemID: "item-1", Quantity: 1, PriceCents: 1000}}
 
-		err = order.TransitionTo(domain.StatusFailed, "payment gateway timeout")
-		require.NoError(t, err)
-		assert.Equal(t, domain.StatusFailed, order.Status)
-		assert.Equal(t, "payment gateway timeout", order.FailureReason)
-	})
+	order, err := domain.NewOrder("cust-1", items)
+	require.NoError(t, err)
 
-	t.Run("invalid transition COMPLETED -> PROCESSING", func(t *testing.T) {
-		order, err := domain.NewOrder("cust-1", items)
-		require.NoError(t, err)
+	err = order.TransitionTo(domain.StatusFailed, "payment gateway timeout")
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusFailed, order.Status)
+	assert.Equal(t, "payment gateway timeout", order.FailureReason)
+}
 
-		_ = order.TransitionTo(domain.StatusProcessing, "")
-		_ = order.TransitionTo(domain.StatusCompleted, "")
+func (DomainSuite) TestOrder_StateTransitions_InvalidTransition(t *testo.T) {
+	items := []domain.OrderItem{{ItemID: "item-1", Quantity: 1, PriceCents: 1000}}
 
-		err = order.TransitionTo(domain.StatusProcessing, "")
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, domain.ErrInvalidStatusTransition))
-	})
+	order, err := domain.NewOrder("cust-1", items)
+	require.NoError(t, err)
+
+	_ = order.TransitionTo(domain.StatusProcessing, "")
+	_ = order.TransitionTo(domain.StatusCompleted, "")
+
+	err = order.TransitionTo(domain.StatusProcessing, "")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrInvalidStatusTransition))
+}
+
+func TestDomainSuite(t *testing.T) {
+	testo.RunSuite(t, new(DomainSuite))
 }
