@@ -21,6 +21,7 @@ flowchart TD
     
     PROM[Prometheus :9090] -->|Scrape /metrics| API
     PROM -->|Scrape /metrics| WP
+    GRAF[Grafana :3000] -->|Query PromQL| PROM
 ```
 
 ---
@@ -34,7 +35,7 @@ flowchart TD
 | RabbitMQ | Message broker with Direct Exchange, Manual ACKs, and DLQ |
 | PostgreSQL 16 | Relational storage for orders and line items with ACID transactions |
 | [GateKeeper](https://github.com/arthkinq/gatekeeper) | Distributed rate limiter integration (Fail-Open policy) |
-| Prometheus | Metrics collection (`orders_created_total`, `orders_processed_total`, latency) |
+| Prometheus & Grafana | Metrics collection (`orders_created_total`, `orders_processed_total`, latency) and pre-provisioned SRE dashboard |
 | Docker Compose | Infrastructure stack management |
 | k6 | Automated gRPC load testing |
 
@@ -76,7 +77,7 @@ order-flow-engine/
 - Docker Desktop
 
 ### 1. Launch Infrastructure & Applications
-Start PostgreSQL, RabbitMQ, API Server, Worker Pool, and Prometheus:
+Start PostgreSQL, RabbitMQ, API Server, Worker Pool, Prometheus, and Grafana:
 
 ```bash
 make docker-up
@@ -86,6 +87,7 @@ make docker-up
 - **gRPC API**: `localhost:50051`
 - **RabbitMQ Management Dashboard**: http://localhost:15672 (User: `guest`, Pass: `guest`)
 - **Prometheus UI**: http://localhost:9090
+- **Grafana Dashboard**: http://localhost:3000 (User: `admin`, Pass: `admin`)
 - **API Metrics**: http://localhost:2112/metrics
 - **Worker Metrics**: http://localhost:2113/metrics
 
@@ -97,7 +99,7 @@ Load testing executed via `k6` using 50 concurrent Virtual Users (VUs) over 50 s
 
 | Metric | Result |
 |---|---|
-| **Peak Throughput** | ~250+ Orders / sec |
+| **Concurrent Virtual Users** | 50 VUs (`~50 req/s` with 1s pacing) |
 | **gRPC Average Latency** | `2.9 ms` |
 | **p(95) Latency** | `9.5 ms` |
 | **Success Rate** | `100%` (0 failed requests) |
