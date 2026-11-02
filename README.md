@@ -35,8 +35,8 @@ flowchart TD
 | RabbitMQ | Message broker with Direct Exchange, Manual ACKs, and DLQ |
 | PostgreSQL 16 | Relational storage for orders and line items with ACID transactions |
 | [GateKeeper](https://github.com/arthkinq/gatekeeper) | Distributed rate limiter integration (Fail-Open policy) |
-| Prometheus & Grafana | Metrics collection (`orders_created_total`, `orders_processed_total`, latency) and pre-provisioned SRE dashboard |
-| Docker Compose | Infrastructure stack management |
+| Prometheus & Grafana | Metrics collection (`orders_created_total`, `orders_processed_total`, latency), SLO alerts, and pre-provisioned SRE dashboard |
+| Docker Compose & Kubernetes (`kind`) | Container orchestration, `Deployment`/`Service`/`ConfigMap` manifests, liveness/readiness probes, non-root containers, CPU/RAM limits |
 | k6 | Automated gRPC load testing |
 
 ---
@@ -44,9 +44,10 @@ flowchart TD
 ## Key Design Decisions
 
 1. **Fail-Open Policy on Rate Limiter**: If [GateKeeper](https://github.com/arthkinq/gatekeeper) is unavailable or times out (>200ms), the API fails open to maintain business availability over rate-limit strictness.
-2. **Manual ACKs & Dead Letter Queue (DLQ)**: Workers use manual acknowledgments (`autoAck = false`). Unprocessable or failed messages are automatically routed to `orders_queue.dlq` for post-mortem analysis without blocking the pipeline.
-3. **State Machine & Data Integrity**: Order state transitions (`PENDING -> PROCESSING -> COMPLETED / FAILED`) are strictly enforced via a domain map. Prices are stored in integer cents (`int64 price_cents`) to avoid floating-point rounding errors.
-4. **Graceful Shutdown**: All services handle `SIGINT` / `syscall.SIGTERM`. Workers finish in-flight order payments (`sync.WaitGroup`) before terminating cleanly.
+2. **Exponential Backoff Retries, Manual ACKs & Dead Letter Queue (DLQ)**: Workers use manual acknowledgments (`autoAck = false`) and retry transient DB failures with exponential backoff before routing unprocessable messages to `orders_queue.dlq` for post-mortem analysis.
+3. **Structured Observability & SLO Alerting**: Structured JSON logging via `log/slog` with `order_id` correlation, Prometheus counters/histograms, Alertmanager rules for availability/error-rate/p95 latency SLOs, and a pre-provisioned Grafana dashboard.
+4. **State Machine & Data Integrity**: Order state transitions (`PENDING -> PROCESSING -> COMPLETED / FAILED`) are strictly enforced via a domain map. Prices are stored in integer cents (`int64 price_cents`) to avoid floating-point rounding errors.
+5. **Graceful Shutdown**: All services handle `SIGINT` / `syscall.SIGTERM`. Workers finish in-flight order payments (`sync.WaitGroup`) before terminating cleanly.
 
 ---
 
@@ -60,11 +61,11 @@ order-flow-engine/
 ├── internal/              # Internal packages (domain, repository, queue, server, worker, ratelimit, metrics)
 ├── proto/order/v1/        # Protobuf definition and Go stubs
 ├── migrations/            # SQL migration files
-├── deployments/           # Docker Compose & Prometheus config
+├── deployments/           # Docker Compose, Prometheus, Grafana, and Kubernetes (k8s/) manifests
 ├── tests/                 # Integration tests & k6 load testing script
 │   ├── integration_test.go
 │   └── load/k6_test.js
-├── Dockerfile             # Multi-stage build specification
+├── Dockerfile             # Multi-stage non-root build specification
 └── Makefile
 ```
 
@@ -75,21 +76,35 @@ order-flow-engine/
 ### Prerequisites
 - Go 1.22+
 - Docker Desktop
+- `kubectl` & `kind` (optional, for local Kubernetes deployment)
 
-### 1. Launch Infrastructure & Applications
+### Option A: Launch via Docker Compose
 Start PostgreSQL, RabbitMQ, API Server, Worker Pool, Prometheus, and Grafana:
 
 ```bash
 make docker-up
 ```
 
-### 2. Check Service Endpoints
+Check Service Endpoints:
 - **gRPC API**: `localhost:50051`
 - **RabbitMQ Management Dashboard**: http://localhost:15672 (User: `guest`, Pass: `guest`)
 - **Prometheus UI**: http://localhost:9090
 - **Grafana Dashboard**: http://localhost:3000 (User: `admin`, Pass: `admin`)
 - **API Metrics**: http://localhost:2112/metrics
 - **Worker Metrics**: http://localhost:2113/metrics
+
+### Option B: Launch on Kubernetes (`kind`)
+Build images, provision a local `kind` cluster, load images, and apply manifests (`ConfigMap`, `Deployment` with `replicas: 2`, `livenessProbe`/`readinessProbe`, resource requests/limits, and `Service`):
+
+```bash
+make k8s-up
+kubectl get pods,svc
+```
+
+To tear down the local `kind` cluster:
+```bash
+make k8s-down
+```
 
 ---
 

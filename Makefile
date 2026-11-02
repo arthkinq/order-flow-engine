@@ -1,7 +1,8 @@
-.PHONY: proto build run-api run-worker test lint docker-up docker-down clean help
+.PHONY: proto build run-api run-worker test lint docker-up docker-down k8s-up k8s-down clean help
 
 PROTO_DIR=proto
 COMPOSE_FILE=deployments/docker-compose.yml
+KIND_CLUSTER=order-flow
 
 proto:
 	protoc --go_out=. --go_opt=paths=source_relative \
@@ -29,6 +30,20 @@ docker-up:
 
 docker-down:
 	docker compose -f $(COMPOSE_FILE) down
+
+k8s-up:
+	docker build --target api -t order-flow-engine-api:latest .
+	docker build --target worker -t order-flow-engine-worker:latest .
+	kind create cluster --name $(KIND_CLUSTER) || true
+	kind load docker-image order-flow-engine-api:latest --name $(KIND_CLUSTER)
+	kind load docker-image order-flow-engine-worker:latest --name $(KIND_CLUSTER)
+	kubectl apply -f deployments/k8s/configmap.yaml -f deployments/k8s/infrastructure.yaml
+	kubectl wait --for=condition=ready pod -l app=postgres --timeout=90s
+	kubectl wait --for=condition=ready pod -l app=rabbitmq --timeout=90s
+	kubectl apply -f deployments/k8s/deployment.yaml -f deployments/k8s/service.yaml
+
+k8s-down:
+	kind delete cluster --name $(KIND_CLUSTER)
 
 clean:
 	rm -rf bin/

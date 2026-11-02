@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-flow-api
+  labels:
+    app: order-flow-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-flow-api
+  template:
+    metadata:
+      labels:
+        app: order-flow-api
+    spec:
+      containers:
+        - name: api
+          image: order-flow-engine-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50051
+            - name: metrics
+              containerPort: 2112
+          envFrom:
+            - configMapRef:
+                name: order-flow-config
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 2112
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 2112
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-flow-worker
+  labels:
+    app: order-flow-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-flow-worker
+  template:
+    metadata:
+      labels:
+        app: order-flow-worker
+    spec:
+      containers:
+        - name: worker
+          image: order-flow-engine-worker:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 2113
+          envFrom:
+            - configMapRef:
+                name: order-flow-config
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 2113
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 2113
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

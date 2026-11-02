@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-flow-api
+  labels:
+    app: order-flow-api
+spec:
+  type: ClusterIP
+  selector:
+    app: order-flow-api
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+    - name: metrics
+      port: 2112
+      targetPort: 2112
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-flow-worker
+  labels:
+    app: order-flow-worker
+spec:
+  type: ClusterIP
+  selector:
+    app: order-flow-worker
+  ports:
+    - name: metrics
+      port: 2113
+      targetPort: 2113
