@@ -65,13 +65,14 @@ func (WorkerPoolSuite) TestPool_StartAndStop(t *testo.T) {
 	repo := newMockRepository()
 	processor := NewOrderProcessor(repo)
 	processor.failureProbability = 0.0
-	processor.paymentLatency = 5 * time.Millisecond
+	processor.paymentLatency = 2 * time.Millisecond
 
 	ch := make(chan amqp.Delivery, 10)
 	consumer := &mockConsumer{ch: ch}
 	acker := &mockAcknowledger{}
 
 	pool := NewPool(consumer, processor, 2)
+	pool.baseRetryDelay = 2 * time.Millisecond
 	require.NotNil(t, pool)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -106,15 +107,17 @@ func (WorkerPoolSuite) TestPool_StartAndStop(t *testo.T) {
 	assert.Equal(t, int32(1), acker.acks.Load())
 }
 
-func (WorkerPoolSuite) TestPool_MalformedPayload_RoutedToDLQ(t *testo.T) {
+func (WorkerPoolSuite) TestPool_MalformedPayload_RoutedToDLQAfterRetries(t *testo.T) {
 	repo := newMockRepository()
 	processor := NewOrderProcessor(repo)
+	processor.paymentLatency = 1 * time.Millisecond
 
 	ch := make(chan amqp.Delivery, 10)
 	consumer := &mockConsumer{ch: ch}
 	acker := &mockAcknowledger{}
 
 	pool := NewPool(consumer, processor, 1)
+	pool.baseRetryDelay = 2 * time.Millisecond
 	ctx := context.Background()
 	require.NoError(t, pool.Start(ctx))
 
@@ -127,10 +130,10 @@ func (WorkerPoolSuite) TestPool_MalformedPayload_RoutedToDLQ(t *testo.T) {
 		Body:         []byte(`{"order_id":"missing-order"}`),
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 	require.NoError(t, pool.Stop())
 
-	assert.Equal(t, int32(2), acker.nacks.Load(), "Expected both malformed and failed messages to be NACKed to DLQ")
+	assert.Equal(t, int32(2), acker.nacks.Load(), "Expected both malformed and failed messages to be NACKed to DLQ after retries")
 }
 
 func (WorkerPoolSuite) TestPool_StartFailure(t *testo.T) {

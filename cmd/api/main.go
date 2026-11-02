@@ -4,7 +4,7 @@ package main
 import (
 	"database/sql"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -23,28 +23,33 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	cfg := config.Load()
-	log.Printf("Starting Order Flow Engine API Server on port %s...", cfg.GRPCServerPort)
+	slog.Info("starting Order Flow Engine API Server", slog.String("port", cfg.GRPCServerPort))
 
 	metrics.StartServer(":2112")
 
 	db, err := sql.Open("pgx", cfg.DBConnString)
 	if err != nil {
-		log.Fatalf("Failed to open DB connection: %v", err)
+		slog.Error("failed to open DB connection", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing DB: %v", err)
+			slog.Error("error closing DB", slog.String("error", err.Error()))
 		}
 	}()
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Database ping failed: %v", err)
+		slog.Error("database ping failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
-	log.Println("Connected to PostgreSQL successfully.")
+	slog.Info("connected to PostgreSQL successfully")
 
 	if err := migrate.Up(db); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	repo := repository.NewPostgresRepository(db)
@@ -57,21 +62,22 @@ func main() {
 	}
 	publisher, err := queue.NewRabbitMQPublisher(pubCfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize RabbitMQ publisher: %v", err)
+		slog.Error("failed to initialize RabbitMQ publisher", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer func() {
 		if err := publisher.Close(); err != nil {
-			log.Printf("Error closing publisher: %v", err)
+			slog.Error("error closing publisher", slog.String("error", err.Error()))
 		}
 	}()
 
 	limiter, err := ratelimit.NewGateKeeperClient(cfg.GateKeeperURL)
 	if err != nil {
-		log.Printf("Warning: Failed to create GateKeeper client: %v", err)
+		slog.Warn("failed to create GateKeeper client", slog.String("error", err.Error()))
 	} else {
 		defer func() {
 			if err := limiter.Close(); err != nil {
-				log.Printf("Error closing limiter: %v", err)
+				slog.Error("error closing limiter", slog.String("error", err.Error()))
 			}
 		}()
 	}
@@ -80,16 +86,18 @@ func main() {
 
 	lis, err := net.Listen("tcp", cfg.GRPCServerPort)
 	if err != nil {
-		log.Fatalf("Failed to listen on port %s: %v", cfg.GRPCServerPort, err)
+		slog.Error("failed to listen on port", slog.String("port", cfg.GRPCServerPort), slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	grpcServer := grpc.NewServer()
 	orderv1.RegisterOrderServiceServer(grpcServer, orderServer)
 
 	go func() {
-		log.Printf("gRPC API Server running and accepting requests on %s...", cfg.GRPCServerPort)
+		slog.Info("gRPC API Server running and accepting requests", slog.String("port", cfg.GRPCServerPort))
 		if err := grpcServer.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			log.Fatalf("gRPC server crashed: %v", err)
+			slog.Error("gRPC server crashed", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
@@ -97,8 +105,8 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	sig := <-quit
-	log.Printf("Received shutdown signal (%v). Initiating graceful shutdown...", sig)
+	slog.Info("received shutdown signal, initiating graceful shutdown", slog.String("signal", sig.String()))
 
 	grpcServer.GracefulStop()
-	log.Println("gRPC API Server stopped cleanly.")
+	slog.Info("gRPC API Server stopped cleanly")
 }

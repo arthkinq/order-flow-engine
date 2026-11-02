@@ -4,7 +4,7 @@ package main
 import (
 	"context"
 	"database/sql"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,25 +18,28 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	cfg := config.Load()
-	log.Printf("Starting Order Flow Engine Worker (workers count: %d)...", cfg.WorkerCount)
+	slog.Info("starting Order Flow Engine Worker", slog.Int("worker_count", cfg.WorkerCount))
 
 	metrics.StartServer(":2113")
 
 	db, err := sql.Open("pgx", cfg.DBConnString)
 	if err != nil {
-		log.Fatalf("Failed to open DB connection: %v", err)
+		slog.Error("failed to open DB connection", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing DB: %v", err)
+			slog.Error("error closing DB", slog.String("error", err.Error()))
 		}
 	}()
 
 	if err := db.Ping(); err != nil {
-		log.Printf("Warning: Database ping failed (will retry on operations): %v", err)
+		slog.Warn("database ping failed (will retry on operations)", slog.String("error", err.Error()))
 	} else {
-		log.Println("Connected to PostgreSQL successfully.")
+		slog.Info("connected to PostgreSQL successfully")
 	}
 
 	repo := repository.NewPostgresRepository(db)
@@ -49,7 +52,8 @@ func main() {
 	}
 	consumer, err := queue.NewRabbitMQConsumer(consumerCfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize RabbitMQ consumer: %v", err)
+		slog.Error("failed to initialize RabbitMQ consumer", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	processor := worker.NewOrderProcessor(repo)
@@ -59,21 +63,22 @@ func main() {
 	defer cancel()
 
 	if err := pool.Start(ctx); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		slog.Error("failed to start worker pool", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
-	log.Println("Worker pool started and listening for incoming order tasks...")
+	slog.Info("worker pool started and listening for incoming order tasks")
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	sig := <-quit
-	log.Printf("Received shutdown signal (%v). Initiating graceful shutdown...", sig)
+	slog.Info("received shutdown signal, initiating graceful shutdown", slog.String("signal", sig.String()))
 
 	if err := pool.Stop(); err != nil {
-		log.Printf("Error stopping worker pool: %v", err)
+		slog.Error("error stopping worker pool", slog.String("error", err.Error()))
 	} else {
-		log.Println("Worker pool stopped cleanly.")
+		slog.Info("worker pool stopped cleanly")
 	}
 
-	log.Println("Worker service shutdown complete.")
+	slog.Info("worker service shutdown complete")
 }

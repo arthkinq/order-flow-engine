@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: order_flow_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -19,6 +20,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: order_flow_rabbitmq
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -37,6 +39,9 @@ services:
       dockerfile: Dockerfile
       target: api
     container_name: order_flow_api
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
     environment:
       DB_CONN_STRING: "postgres://postgres:postgres@postgres:5432/order_flow?sslmode=disable"
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
@@ -57,6 +62,9 @@ services:
       dockerfile: Dockerfile
       target: worker
     container_name: order_flow_worker
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
     environment:
       DB_CONN_STRING: "postgres://postgres:postgres@postgres:5432/order_flow?sslmode=disable"
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
@@ -72,6 +80,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: order_flow_prometheus
+    restart: unless-stopped
     ports:
       - "9090:9090"
     volumes:
@@ -81,6 +90,7 @@ services:
   grafana:
     image: grafana/grafana:10.4.2
     container_name: order_flow_grafana
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:

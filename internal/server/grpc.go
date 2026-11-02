@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/arthkinq/order-flow-engine/internal/domain"
 	"github.com/arthkinq/order-flow-engine/internal/metrics"
@@ -42,6 +43,7 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *orderv1.CreateOrderR
 	customerID := req.GetCustomerId()
 
 	if s.limiter != nil && !s.limiter.Allow(ctx, customerID, "create_order") {
+		slog.WarnContext(ctx, "rate limit exceeded", slog.String("customer_id", customerID))
 		return nil, status.Error(codes.ResourceExhausted, "rate limit exceeded for customer")
 	}
 
@@ -61,14 +63,29 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *orderv1.CreateOrderR
 	}
 
 	if err := s.repo.Create(ctx, order); err != nil {
+		slog.ErrorContext(ctx, "failed to save order in DB",
+			slog.String("order_id", order.ID),
+			slog.String("customer_id", customerID),
+			slog.String("error", err.Error()),
+		)
 		return nil, status.Errorf(codes.Internal, "failed to save order: %v", err)
 	}
 
 	if err := s.publisher.PublishOrderCreated(ctx, order.ID); err != nil {
+		slog.ErrorContext(ctx, "failed to publish order to queue",
+			slog.String("order_id", order.ID),
+			slog.String("customer_id", customerID),
+			slog.String("error", err.Error()),
+		)
 		return nil, status.Errorf(codes.Internal, "failed to publish order to queue: %v", err)
 	}
 
 	metrics.OrdersCreatedTotal.Inc()
+	slog.InfoContext(ctx, "order created and published",
+		slog.String("order_id", order.ID),
+		slog.String("customer_id", customerID),
+		slog.Int64("total_amount_cents", order.TotalAmountCents),
+	)
 
 	return &orderv1.CreateOrderResponse{
 		OrderId:   order.ID,
@@ -89,6 +106,10 @@ func (s *OrderServer) GetOrder(ctx context.Context, req *orderv1.GetOrderRequest
 		if errors.Is(err, domain.ErrOrderNotFound) {
 			return nil, status.Errorf(codes.NotFound, "order [%s] not found", orderID)
 		}
+		slog.ErrorContext(ctx, "failed to fetch order",
+			slog.String("order_id", orderID),
+			slog.String("error", err.Error()),
+		)
 		return nil, status.Errorf(codes.Internal, "failed to fetch order: %v", err)
 	}
 
