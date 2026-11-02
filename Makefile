@@ -1,4 +1,4 @@
-.PHONY: proto build run-api run-worker test docker-up docker-down clean help
+.PHONY: proto build run-api run-worker test lint docker-up docker-down clean help
 
 PROTO_DIR=proto
 COMPOSE_FILE=deployments/docker-compose.yml
@@ -19,7 +19,10 @@ run-worker:
 	go run ./cmd/worker
 
 test:
-	go test -v ./...
+	go test -v ./... -cover
+
+lint:
+	golangci-lint run ./...
 
 docker-up:
 	docker compose -f $(COMPOSE_FILE) up -d --build
@@ -29,4 +32,3 @@ docker-down:
 
 clean:
 	rm -rf bin/
-

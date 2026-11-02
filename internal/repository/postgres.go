@@ -27,7 +27,7 @@ func (r *PostgresRepository) Create(ctx context.Context, order *domain.Order) er
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	const queryOrder = `
 		INSERT INTO orders (id, customer_id, total_amount_cents, status, failure_reason, created_at, updated_at)
@@ -106,7 +106,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id string) (*domain.Or
 	if err != nil {
 		return nil, fmt.Errorf("failed to query order items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []domain.OrderItem
 	for rows.Next() {

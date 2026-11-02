@@ -47,7 +47,7 @@ func NewRabbitMQPublisher(cfg SetupConfig) (*RabbitMQPublisher, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
@@ -62,8 +62,8 @@ func NewRabbitMQPublisher(cfg SetupConfig) (*RabbitMQPublisher, error) {
 		nil,
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
@@ -79,15 +79,15 @@ func NewRabbitMQPublisher(cfg SetupConfig) (*RabbitMQPublisher, error) {
 		nil,
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to declare DLQ: %w", err)
 	}
 
 	err = ch.QueueBind(dlqName, dlqRoutingKey, cfg.Exchange, false, nil)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to bind DLQ: %w", err)
 	}
 
@@ -105,15 +105,15 @@ func NewRabbitMQPublisher(cfg SetupConfig) (*RabbitMQPublisher, error) {
 		args,
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to declare main queue: %w", err)
 	}
 
 	err = ch.QueueBind(cfg.Queue, cfg.RoutingKey, cfg.Exchange, false, nil)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to bind main queue: %w", err)
 	}
 
@@ -160,7 +160,7 @@ func (p *RabbitMQPublisher) PublishOrderCreated(ctx context.Context, orderID str
 // Close gracefully closes the channel and connection.
 func (p *RabbitMQPublisher) Close() error {
 	if err := p.ch.Close(); err != nil {
-		p.conn.Close()
+		_ = p.conn.Close()
 		return err
 	}
 	return p.conn.Close()

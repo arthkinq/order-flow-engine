@@ -3,6 +3,7 @@ package tests
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -13,17 +14,22 @@ import (
 
 // TestOrderFlow_Integration performs an end-to-end test against a running instance of Order Flow Engine.
 func TestOrderFlow_Integration(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, "localhost:50051",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
+	dialConn, err := net.DialTimeout("tcp", "localhost:50051", 200*time.Millisecond)
 	if err != nil {
 		t.Skipf("Skipping integration test: gRPC server not reachable at localhost:50051 (%v)", err)
 	}
-	defer conn.Close()
+	_ = dialConn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := grpc.NewClient("localhost:50051",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create gRPC client: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
 
 	client := orderv1.NewOrderServiceClient(conn)
 

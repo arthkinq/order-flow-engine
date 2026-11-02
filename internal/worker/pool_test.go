@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +15,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type mockAcknowledger struct {
+	acks  atomic.Int32
+	nacks atomic.Int32
+}
+
+func (m *mockAcknowledger) Ack(tag uint64, multiple bool) error {
+	m.acks.Add(1)
+	return nil
+}
+
+func (m *mockAcknowledger) Nack(tag uint64, multiple bool, requeue bool) error {
+	m.nacks.Add(1)
+	return nil
+}
+
+func (m *mockAcknowledger) Reject(tag uint64, requeue bool) error {
+	m.nacks.Add(1)
+	return nil
+}
 
 type mockConsumer struct {
 	ch        chan amqp.Delivery
@@ -43,9 +64,12 @@ type WorkerPoolSuite struct {
 func (WorkerPoolSuite) TestPool_StartAndStop(t *testo.T) {
 	repo := newMockRepository()
 	processor := NewOrderProcessor(repo)
+	processor.failureProbability = 0.0
+	processor.paymentLatency = 5 * time.Millisecond
 
 	ch := make(chan amqp.Delivery, 10)
 	consumer := &mockConsumer{ch: ch}
+	acker := &mockAcknowledger{}
 
 	pool := NewPool(consumer, processor, 2)
 	require.NotNil(t, pool)
@@ -67,17 +91,46 @@ func (WorkerPoolSuite) TestPool_StartAndStop(t *testo.T) {
 	})
 
 	ch <- amqp.Delivery{
-		Body: payload,
+		Acknowledger: acker,
+		Body:         payload,
 	}
 
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	err = pool.Stop()
 	assert.NoError(t, err)
 
 	updatedOrder, err := repo.GetByID(ctx, order.ID)
 	require.NoError(t, err)
-	assert.True(t, updatedOrder.Status == domain.StatusCompleted || updatedOrder.Status == domain.StatusFailed)
+	assert.Equal(t, domain.StatusCompleted, updatedOrder.Status)
+	assert.Equal(t, int32(1), acker.acks.Load())
+}
+
+func (WorkerPoolSuite) TestPool_MalformedPayload_RoutedToDLQ(t *testo.T) {
+	repo := newMockRepository()
+	processor := NewOrderProcessor(repo)
+
+	ch := make(chan amqp.Delivery, 10)
+	consumer := &mockConsumer{ch: ch}
+	acker := &mockAcknowledger{}
+
+	pool := NewPool(consumer, processor, 1)
+	ctx := context.Background()
+	require.NoError(t, pool.Start(ctx))
+
+	ch <- amqp.Delivery{
+		Acknowledger: acker,
+		Body:         []byte("{invalid-json"),
+	}
+	ch <- amqp.Delivery{
+		Acknowledger: acker,
+		Body:         []byte(`{"order_id":"missing-order"}`),
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	require.NoError(t, pool.Stop())
+
+	assert.Equal(t, int32(2), acker.nacks.Load(), "Expected both malformed and failed messages to be NACKed to DLQ")
 }
 
 func (WorkerPoolSuite) TestPool_StartFailure(t *testo.T) {

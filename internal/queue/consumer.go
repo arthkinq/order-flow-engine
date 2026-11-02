@@ -42,7 +42,7 @@ func NewRabbitMQConsumer(cfg ConsumerConfig) (*RabbitMQConsumer, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
@@ -53,8 +53,8 @@ func NewRabbitMQConsumer(cfg ConsumerConfig) (*RabbitMQConsumer, error) {
 		false,             // per consumer channel
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to set channel QoS: %w", err)
 	}
 
@@ -88,7 +88,7 @@ func (c *RabbitMQConsumer) Consume() (<-chan amqp.Delivery, error) {
 // Close gracefully shuts down the consumer channel and connection.
 func (c *RabbitMQConsumer) Close() error {
 	if err := c.ch.Close(); err != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		return err
 	}
 	return c.conn.Close()
