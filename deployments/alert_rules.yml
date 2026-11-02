@@ -1,0 +1,36 @@
+groups:
+  - name: order_flow_slo_alerts
+    interval: 15s
+    rules:
+      - alert: ServiceInstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "Target {{ $labels.job }} ({{ $labels.instance }}) has been unreachable for more than 1 minute (SLA availability breach)."
+
+      - alert: HighOrderErrorRate
+        expr: >
+          (
+            sum(rate(orders_processed_total{status="failed"}[5m]))
+            /
+            clamp_min(sum(rate(orders_processed_total[5m])), 1e-9)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High order processing error rate (> 5%)"
+          description: "Worker error rate is {{ $value | humanizePercentage }} over the last 5m, exceeding the 95% success SLO."
+
+      - alert: HighOrderProcessingLatencyP95
+        expr: >
+          histogram_quantile(0.95, sum(rate(order_processing_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Order processing p95 latency > 500ms"
+          description: "Worker p95 processing duration is {{ $value }}s, breaching the latency SLO."
